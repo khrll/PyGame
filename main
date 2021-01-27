@@ -1,0 +1,703 @@
+import os
+import pygame
+import time
+import random
+import sys
+
+FPS = 50
+
+WIDTH, HEIGHT = 800, 600
+STATUS_BAR_HEIGHT = 50
+IMG_GORY = 'gory.jpg'
+IMG_LES = 'lles.png'
+IMG_BATTARY = 'but_2.png'
+IMG_HERO = 'bird_22.png'
+IMG_GOOD_BIRD = 'bird_33.png'
+IMG_BAD_BIRD = 'bird_44.png'
+IMG_BOOM = 'boom_5_2.jpg'
+IMG_AIR = 'air_5.png'
+IMG_CLOUD = 'cloud.png'
+
+
+class GameOver(Exception):
+    pass
+
+
+def score_file(name='None', score='000000'):
+    with open('score.txt', mode='rt', encoding='utf8') as file:
+        lines = file.readlines()
+    if len(name) > 8:
+        name = name[:8]
+    new = []
+    for i in range(10):
+        nb, nm, sc = lines[i].split()
+        name = name.ljust(10, ' ')
+        nm = nm.ljust(10, ' ')
+        if int(sc) < int(score) and ' '.join([name, str(score).zfill(6)]) not in new:
+            print(' '.join([name, str(score).zfill(6)]))
+            new.append(' '.join([name, str(score).zfill(6)]))
+        print(' '.join([nm, sc]))
+        new.append(' '.join([nm, sc]))
+    open('score.txt', 'w').close()
+    new = new[:10]
+    with open('score.txt', mode='wt', encoding='utf8') as file:
+        for i in range(len(new)):
+            file.write(str(i + 1).zfill(2) + ' ' + new[i] + '\n')
+    return new
+
+
+def terminate():
+    pygame.quit()
+    sys.exit()
+
+
+def check_time(latest, delta):
+    if time.time() - latest >= delta:
+        return True
+    else:
+        return False
+
+
+def check_visible(rect):
+    if rect.x < -rect.width or rect.x > rect.width + WIDTH:
+        return False
+    if rect.y < -rect.height or rect.y > rect.height + HEIGHT:
+        return False
+    return True
+
+
+def load_image(name, color_key=None):
+    fullname = os.path.join('data', name)
+    try:
+        image = pygame.image.load(fullname).convert()
+    except pygame.error as message:
+        print('Cannot load image:', name)
+        raise SystemExit(message)
+
+    if color_key is not None:
+        if color_key == -1:
+            color_key = image.get_at((0, 0))
+        image.set_colorkey(color_key)
+    else:
+        image = image.convert_alpha()
+    return image
+
+
+def fail_screen():
+    global groups, screen
+    fon = load_image('fail.jpg')
+
+    # font = pygame.font.Font(None, 28)
+
+    screen.blit(fon, (0, 0))
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_SPACE]:
+                    return
+        pygame.display.flip()
+
+
+def start_screen():
+    global player_name
+    fon = load_image('start.jpg')
+    # fon_2 = load_image('lles.png', -1)
+    screen.blit(fon, (0, 0))
+    # screen.blit(fon_2, (0, 800 - 499))
+    print(pygame.font.get_fonts())
+    font = pygame.font.Font(None, 28)
+
+    # text1 = font.render(''.join(score_file(score=status_bar.score, name=status_bar.player_name)), True,
+    # (255, 255, 255))
+
+    ##
+    input_box = pygame.Rect(275, 520, 140, 32)
+    color_inactive = pygame.Color('black')
+    color_active = pygame.Color('yellow')
+    color = color_inactive
+    active = False
+    text = status_bar.player_name
+    done = False
+
+    #
+    #
+    fon_2 = load_image('start_rules-1.png', -1)
+    fon_3 = load_image('name_upd.jpg', -1)
+    text_coord = 120
+    with open('score.txt', mode='rt', encoding='utf8') as file:
+        intro_text = file.readlines()
+    for line in intro_text:
+        line = line.strip()
+        string_rendered = font.render(line, 1, pygame.Color('white'))
+        intro_rect = string_rendered.get_rect()
+        text_coord += 10
+        intro_rect.top = text_coord
+        intro_rect.x = 525
+        text_coord += intro_rect.height
+        screen.blit(string_rendered, intro_rect)
+    birds = pygame.sprite.Group()
+
+    im = Images(birds, 240, 280, IMG_HERO, 120, 90, par=0)
+    goo = Images(birds, 100, 300, IMG_GOOD_BIRD, 190, 320)
+    bad = Images(birds, 100, 300, IMG_BAD_BIRD, 30, 320)
+    cloud = Cloud(birds, move=(0, 0), size=80, acting=False)
+    upp = Images_2(birds, 80, 220, 55, image='arrows_1.png')
+    space = Images_2(birds, 90, 210, 200, image='Key_space_2.png')
+    t_1 = time.time()
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                # If the user clicked on the input_box rect.
+                if input_box.collidepoint(event.pos):
+                    # Toggle the active variable.
+                    active = not active
+                else:
+                    active = False
+                # Change the current color of the input box.
+                color = color_active if active else color_inactive
+            if event.type == pygame.KEYDOWN:
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_SPACE]:
+                    return
+                if active:
+                    if event.key == pygame.K_RETURN:
+                        screen.blit(fon_3, (0, 500))
+                        active = False
+                        # text = ''
+                    elif event.key == pygame.K_BACKSPACE:
+                        screen.blit(fon_3, (0, 500))
+                        text = text[:-1]
+                    else:
+                        if len(text) < 8:
+                            text += event.unicode
+                    color = color_active if active else color_inactive
+        if time.time() - t_1 >= 0.09:
+            birds.update()
+            t_1 = time.time()
+            # screen.blit(fon, (0, 0))
+            screen.blit(fon_2, (0, 0))
+            birds.draw(screen)
+        font_name = pygame.font.Font(None, 50)
+        txt_surface = font_name.render(text, True, color)
+        # Resize the box if the text is too long.
+        width = max(250, txt_surface.get_width() + 20)
+        input_box.w = width
+        input_box.h = 40
+        # Blit the text.
+        screen.blit(txt_surface, (input_box.x + 10, input_box.y + 5))
+        # Blit the input_box rect.
+        player_name = text
+        pygame.draw.rect(screen, color, input_box, 3)
+        pygame.display.flip()
+
+
+class BackGround(pygame.sprite.Sprite):
+    def __init__(self, image_name, group, x, y, delta, arg=0):
+        super().__init__(group)
+        self.image = load_image(image_name, arg)
+        self.rect = self.image.get_rect()
+        self.mask = pygame.mask.from_surface(self.image)
+        self.rect.x = x
+        self.rect.y = y
+        self.delta_time = delta
+        self.time = time.time()
+
+    def update(self):
+        if check_time(self.time, self.delta_time):
+            self.rect.x -= 1
+            self.time = time.time()
+        if self.rect.x == -self.rect.width:
+            self.rect.x = self.rect.width
+
+
+class Battary(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__(hero)
+        self.frames = []
+        self.cut_sheet(load_image(IMG_BATTARY, -1), 4, 1)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(720, 15)
+        self.mask = pygame.mask.from_surface(self.image)
+        self.health = 4
+        self.max_health = 4
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns, sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(frame_location, self.rect.size)))
+
+    def update(self):
+        global running
+        try:
+            if self.health - 1 < 0:
+                raise GameOver
+            if self.health - 1 != self.cur_frame:
+                self.cur_frame = self.health - 1
+            self.image = self.frames[self.cur_frame]
+        except GameOver:
+            global run, fail
+            run = False
+            fail = True
+
+    def change_health(self, value):
+        if self.health + value >= self.max_health:
+            self.health = self.max_health
+        elif self.health + value <= 0:
+            self.health = 0
+        else:
+            self.health += value
+
+
+class Images_2(pygame.sprite.Sprite):
+    def __init__(self, group, scale, x, y, par=1, image='arrows_1.png'):
+        super().__init__(group)
+        self.par = par
+        self.time_2 = time.time()
+
+        self.new = 0.5
+        self.image = pygame.transform.scale(load_image(image, -1), (scale, scale))
+        self.rect = pygame.Rect(0, 0, self.image.get_width(), self.image.get_height())
+
+        self.rect = self.rect.move(x, y)
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def update(self):
+        if check_time(self.time_2, self.new):
+            self.time_2 = time.time()
+
+
+class Images(pygame.sprite.Sprite):
+    def __init__(self, group, speed, scale, img, x, y, par=1):
+        super().__init__(group)
+        self.par = par
+        self.time_2 = time.time()
+        self.delta_time = int(1 / speed * 1000) / 1000
+        self.k = 1200
+        self.speed = speed
+        self.vzmahh = int(1 / self.speed * 300) * 0.02
+        self.frames = []
+        self.name_pict = img
+        self.cut_sheet(pygame.transform.scale(load_image(self.name_pict, -1), (scale, scale)), 3, 3)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(x, y)
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns, sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(frame_location, self.rect.size)))
+
+    def update(self):
+        if check_time(self.time_2, self.vzmahh):
+            if self.par:
+                self.cur_frame = (self.cur_frame - 1) % len(self.frames)
+            else:
+                self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+            self.image = self.frames[self.cur_frame]
+            self.time_2 = time.time()
+
+    def time_start(self):
+        self.v_down_time = 0
+
+
+class Bird(pygame.sprite.Sprite):
+    def __init__(self, group, only_img=False):
+        super().__init__(group)
+        self.v_down_time = 3
+        # self.v_down = [7, 6, 3, 1, 0, -1, -3, -6, -7, -10, -14, -18, -24]
+        self.v_down = [18, 15, 10, 0, -10, -17, -22]
+        self.time_1 = time.time()
+        self.time_2 = time.time()
+        self.vzmahh = 0.5
+        self.delta_time = 0.1
+        self.k = 0.005
+        self.flipped = False
+        self.rev_delta_time = 5
+        self.frames = []
+        self.cut_sheet(load_image(IMG_HERO, -1), 3, 3)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(200, 200)
+        self.mask = pygame.mask.from_surface(self.image)
+        self.only_img = only_img
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns, sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(frame_location, self.rect.size)))
+
+    def update(self):
+        self.vzmahh = (self.v_down[0] - self.v_down[self.v_down_time]) * self.k + 0.05
+        if check_time(self.time_2, self.vzmahh):
+            self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+            self.image = self.frames[self.cur_frame]
+            if self.flipped:
+                self.zerc_img()
+            self.time_2 = time.time()
+
+        if not self.only_img:
+            if check_time(self.time_1, self.delta_time):
+                # if not pygame.sprite.collide_mask(self, bck_3):
+                self.time_1 = time.time()
+                if self.v_down_time < len(self.v_down) - 1:
+                    self.v_down_time += 1
+                if not self.flipped:
+                    if STATUS_BAR_HEIGHT <= self.rect.y - self.v_down[self.v_down_time]:
+                        if self.rect.y - self.v_down[self.v_down_time] <= HEIGHT - self.rect.height:
+                            self.rect = self.rect.move(0, -self.v_down[self.v_down_time])
+                        else:
+                            self.rect.y = HEIGHT - self.rect.height
+                    else:
+                        self.rect.y = STATUS_BAR_HEIGHT
+                else:
+                    if STATUS_BAR_HEIGHT <= self.rect.y + self.v_down[self.v_down_time]:
+                        if self.rect.y + self.v_down[self.v_down_time] <= HEIGHT - self.rect.height:
+                            self.rect = self.rect.move(0, self.v_down[self.v_down_time])
+                        else:
+                            self.rect.y = HEIGHT - self.rect.height
+                    else:
+                        self.rect.y = STATUS_BAR_HEIGHT
+
+            if pygame.sprite.spritecollideany(self, birds):
+                for el in birds:
+                    if pygame.sprite.collide_mask(self, el):
+                        if el.life < 0:
+                            status_bar.score += 7
+                        else:
+                            status_bar.score += 3
+                        bat.change_health(el.life)
+                        Boom(bombs, el.rect.x, el.rect.y)
+                        sound_boom.play()
+                        el.kill()
+
+            if pygame.sprite.spritecollideany(self, clouds):
+                for el in clouds:
+                    if pygame.sprite.collide_mask(self, el):
+                        sound_cloud.play()
+                        if self.flipped != True:
+                            status_bar.score += 10
+                        self.flipped = True
+                        self.reverse_time = time.time()
+                        break
+
+            if self.flipped:
+                if check_time(self.reverse_time, self.rev_delta_time):
+                    self.flipped = False
+
+    def zerc_img(self):
+        self.image = pygame.transform.flip(self.image, False, True)
+
+    def time_start(self):
+        self.v_down_time = 0
+
+
+class SBird(pygame.sprite.Sprite):
+    def __init__(self, group, speed, life, scale):
+        super().__init__(group)
+        # self.image = load_image('bird.png', -1)
+        # self.rect = self.image.get_rect()
+        # self.mask = pygame.mask.from_surface(self.image)
+        # self.rect.x = 200
+        # self.rect.y = 200
+        self.time_1 = time.time()
+        self.time_2 = time.time()
+
+        self.delta_time = int(1 / speed * 1000) / 1000
+        self.k = 1200
+        self.life = life
+        self.speed = speed
+        self.vzmahh = int(1 / self.speed * 300) * 0.02
+        #
+        self.frames = []
+        if self.life < 0:
+            self.name_pict = IMG_GOOD_BIRD
+        else:
+            self.name_pict = IMG_BAD_BIRD
+        self.cut_sheet(pygame.transform.scale(load_image(self.name_pict, -1), (scale, scale)), 3, 3)
+        self.cur_frame = 0
+        self.image = self.frames[self.cur_frame]
+        self.rect = self.rect.move(WIDTH, random.randint(STATUS_BAR_HEIGHT, HEIGHT - self.image.get_height()))
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns, sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(frame_location, self.rect.size)))
+
+    def update(self):
+        if check_time(self.time_1, self.delta_time):
+            self.rect = self.rect.move(-1, 0)
+            self.time_1 = time.time()
+        if check_time(self.time_2, self.vzmahh):
+            self.cur_frame = (self.cur_frame - 1) % len(self.frames)
+            self.image = self.frames[self.cur_frame]
+            self.time_2 = time.time()
+        if not check_visible(self.rect):
+            self.kill()
+
+
+class Boom(pygame.sprite.Sprite):
+    def __init__(self, group, x, y):
+        super().__init__(group)
+        self.frames = []
+        self.name_pict = IMG_BOOM
+        self.cut_sheet(load_image(self.name_pict, -1), 4, 3)
+        self.cur_frame = 0
+        self.rect.center = x, y
+        self.image = self.frames[self.cur_frame]
+        self.mask = pygame.mask.from_surface(self.image)
+        self.time_1 = time.time()
+        self.delta_time = 0.05
+
+    def cut_sheet(self, sheet, columns, rows):
+        self.rect = pygame.Rect(0, 0, sheet.get_width() // columns, sheet.get_height() // rows)
+        for j in range(rows):
+            for i in range(columns):
+                frame_location = (self.rect.w * i, self.rect.h * j)
+                self.frames.append(sheet.subsurface(pygame.Rect(frame_location, self.rect.size)))
+
+    def update(self):
+        if check_time(self.time_1, self.delta_time):
+            # if not pygame.sprite.collide_mask(self, bck_3):
+            self.time_1 = time.time()
+            self.rect = self.rect.move(-1, 0)
+            self.cur_frame = (self.cur_frame + 1) % len(self.frames)
+            if (self.cur_frame + 1) % len(self.frames) == 0:
+                self.kill()
+            self.image = self.frames[self.cur_frame]
+            self.time_2 = time.time()
+
+
+class Air(pygame.sprite.Sprite):
+    def __init__(self, group):
+        super().__init__(group)
+        self.frames = []
+        self.name_pict = IMG_AIR
+        self.image = pygame.transform.scale(load_image(self.name_pict, -1), (100, 100))
+        self.rect = pygame.Rect(0, 0, self.image.get_width(), self.image.get_height())
+        self.rect = self.rect.move(random.randint(0, WIDTH - self.rect.width), HEIGHT)
+        self.mask = pygame.mask.from_surface(self.image)
+        self.time_1 = time.time()
+        self.delta_time = 0.1
+
+    def update(self):
+        if check_time(self.time_1, self.delta_time):
+            self.time_1 = time.time()
+            self.rect = self.rect.move(-1, -1)
+        if not check_visible(self.rect):
+            self.kill()
+
+
+class Cloud(pygame.sprite.Sprite):
+    def __init__(self, group, move=(-1, 0), size=random.randint(80, 200), acting=True):
+        super().__init__(group)
+        self.move = move
+        self.name_pict = IMG_CLOUD
+        self.image = pygame.transform.scale(load_image(self.name_pict, -1), (size, size))
+        self.rect = pygame.Rect(0, 0, self.image.get_width(), self.image.get_height())
+        if not acting:
+            self.rect = self.rect.move(215, 150)
+        else:
+            self.rect = self.rect.move(WIDTH, random.randint(STATUS_BAR_HEIGHT, 2 * self.rect.height))
+        self.mask = pygame.mask.from_surface(self.image)
+        self.time_1 = time.time()
+        self.delta_time = 0.05
+
+    def update(self):
+        if check_time(self.time_1, self.delta_time):
+            self.time_1 = time.time()
+            self.rect = self.rect.move(*self.move)
+        if not check_visible(self.rect):
+            self.kill()
+
+
+class Text(pygame.sprite.Sprite):
+    def __init__(self, group):
+        global player_name
+        super().__init__(group)
+        self.font = pygame.font.Font(None, 36)
+        self.score = 0
+        self.player_name = player_name
+
+        self.text1 = self.font.render('Счёт: ' + str(self.score).zfill(6), True,
+                                      (255, 255, 255))
+
+        self.text2 = self.font.render('Жизней осталось: ' + str(bat.health), True,
+                                      (255, 255, 255))
+        width, height = WIDTH, 50
+        self.image = pygame.Surface((width, height))
+        self.image.fill((123, 138, 145))
+        # self.image.set_alpha(0)
+        self.rect = pygame.Rect(0, 0, self.image.get_width(), self.image.get_height())
+        self.image.blit(self.text1, (10, 25))
+        self.image.blit(self.text2, (200, 25))
+
+    def update(self):
+        self.player_name = player_name
+        self.image.fill((123, 138, 145))
+        self.text1 = self.font.render('Счёт: ' + str(self.score).zfill(6), True,
+                                      (255, 255, 255))
+        self.text2 = self.font.render('Жизней осталось: ' + str(bat.health), True,
+                                      (255, 255, 255))
+
+        self.text3 = self.font.render('Переворот!', True,
+                                      (255, 240, 0))
+        self.image.blit(self.text1, (10, 25))
+        self.image.blit(self.text2, (450, 25))
+
+        if bird.flipped:
+            self.image.blit(self.text3, (240, 25))
+
+
+DELTA_AIRS = 30
+DELTA_BIRDS = 3
+DELTA_CLOUDS = 20
+
+if __name__ == '__main__':
+
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    groups = []
+    need = []
+    names_of_groups = ['gory', 'les', 'hero', 'airs', 'clouds', 'bombs', 'bar']
+    # BGR
+    gory = pygame.sprite.Group()
+    les = pygame.sprite.Group()
+    # OBJ
+    hero = pygame.sprite.Group()
+    airs = pygame.sprite.Group()
+    birds = pygame.sprite.Group()
+    clouds = pygame.sprite.Group()
+    bombs = pygame.sprite.Group()
+    bar = pygame.sprite.Group()
+    pause_menu = pygame.sprite.Group()
+
+    groups.append(gory)
+    groups.append(airs)
+    groups.append(les)
+    groups.append(clouds)
+    groups.append(birds)
+    groups.append(bar)
+    groups.append(hero)
+    groups.append(pause_menu)
+    groups.append(bombs)
+
+    bck_1 = BackGround(IMG_GORY, gory, 0, STATUS_BAR_HEIGHT, 0.7, 0)
+    bck_2 = BackGround(IMG_GORY, gory, WIDTH, STATUS_BAR_HEIGHT, 0.7, 0)
+    bck_3 = BackGround(IMG_LES, les, 0, 800 - 499, 0.1, -1)
+    bck_4 = BackGround(IMG_LES, les, 1400, 800 - 499, 0.1, -1)
+    bird = Bird(hero)
+    bat = Battary()
+    player_name = 'None'
+    status_bar = Text(bar)
+
+    running = True
+    t_birds = time.time()
+    t_airs = time.time()
+    t_gory = time.time()
+    t_les = time.time()
+    t_clouds = time.time()
+    play_time = time.time()
+    DELTA_TIME = 1
+    run = False
+    pause = False
+    start = True
+    fail = False
+    # for i in range(4):
+    pygame.mixer.music.load('fon.mp3')
+    pygame.mixer.music.play(-1)
+    sound_boom = pygame.mixer.Sound('boom.mp3')
+    sound_wing = pygame.mixer.Sound('wing.mp3')
+    sound_cloud = pygame.mixer.Sound('cloud.mp3')
+
+    while running:
+        # внутри игрового цикла ещё один цикл
+        # приема и обработки сообщений
+        if start:
+            for el in groups:
+                for n in el:
+                    n.kill()
+            start_screen()
+            bck_1 = BackGround(IMG_GORY, gory, 0, STATUS_BAR_HEIGHT, 0.7, 0)
+            bck_2 = BackGround(IMG_GORY, gory, WIDTH, STATUS_BAR_HEIGHT, 0.7, 0)
+            bck_3 = BackGround(IMG_LES, les, 0, 800 - 499, 0.1, -1)
+            bck_4 = BackGround(IMG_LES, les, 1400, 800 - 499, 0.1, -1)
+            bird = Bird(hero)
+            bat = Battary()
+            status_bar = Text(bar)
+            score_file(score=str(status_bar.score), name=status_bar.player_name)
+
+            start = False
+            run = True
+            pause = False
+        if pause:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN:
+                    keys = pygame.key.get_pressed()
+                    if keys[pygame.K_SPACE]:
+                        pause = False
+                        run = True
+                        fon_pause.kill()
+        if fail:
+            score_file(score=str(status_bar.score), name=status_bar.player_name)
+            fail_screen()
+            fail = False
+            start = True
+        if run:
+            for event in pygame.event.get():
+                # при закрытии окна
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN:
+                    keys = pygame.key.get_pressed()
+                    if keys[pygame.K_UP] or keys[pygame.K_w]:
+                        # pygame.mixer.music.play()
+                        sound_wing.play()
+                        bird.time_start()
+                    if keys[pygame.K_SPACE]:
+                        pause = True
+                        run = False
+                        fon_pause = BackGround('pausa.jpg', pause_menu, 0, 0, 0, 0)
+                        # bird_pause = Bird(pause_menu, only_img=True)
+                        # bird.rect.y -= 30
+            # screen.fill((0, 0, 0))
+            if check_time(t_birds, DELTA_BIRDS):
+                SBird(birds, random.randint(40, 100), random.choice((-1, 0, 1)), random.randint(180, 360))
+                t_birds = time.time()
+            if check_time(t_airs, DELTA_AIRS):
+                Air(airs)
+                t_airs = time.time()
+            if check_time(t_clouds, DELTA_CLOUDS):
+                Cloud(clouds)
+                t_clouds = time.time()
+            if check_time(play_time, DELTA_TIME):
+                status_bar.score += 1
+                play_time = time.time()
+            for el in groups:
+                el.update()
+
+            for el in groups:
+                el.draw(screen)
+
+        # обновление экрана
+        pygame.display.flip()
+
+    # start_screen()
+    pygame.quit()
+
